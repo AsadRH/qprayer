@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Prayer Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="manifest.json">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 430px;
+      margin: auto;
+      padding: 15px;
+    }
+    h2, h3 { text-align: center; }
+    label { display: block; margin: 5px 0; }
+    button { width: 100%; padding: 10px; margin-top: 8px; }
+    .box {
+      background: #f3f3f3;
+      padding: 10px;
+      margin-top: 15px;
+    }
+    input[type=number] {
+      width: 100%;
+      padding: 5px;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Missed Prayer Tracker</h2>
+
+<div class="box">
+  <h3>Initial Missed Period</h3>
+  <label>From: <input type="date" id="start"></label>
+  <label>To: <input type="date" id="end"></label>
+  <button onclick="setInitialMissed()">Set Initial Missed</button>
+</div>
+
+<div class="box">
+  <h3>Record Prayed (Qaza)</h3>
+  <label>Date: <input type="date" id="date" onchange="loadDate()"></label>
+
+  <label><input type="checkbox" value="fajr"> Fajr</label>
+  <label><input type="checkbox" value="zuhr"> Zuhr</label>
+  <label><input type="checkbox" value="asr"> Asr</label>
+  <label><input type="checkbox" value="maghrib"> Maghrib</label>
+  <label><input type="checkbox" value="isha"> Isha</label>
+  <label><input type="checkbox" value="witr"> Witr</label>
+
+  <button onclick="save()">Save / Update</button>
+</div>
+
+<div class="box">
+  <h3>Manual Adjustment</h3>
+  <p>Add (+) or Remove (-) missed prayers</p>
+  <label>Fajr <input type="number" id="adj-fajr" value="0"></label>
+  <label>Zuhr <input type="number" id="adj-zuhr" value="0"></label>
+  <label>Asr <input type="number" id="adj-asr" value="0"></label>
+  <label>Maghrib <input type="number" id="adj-maghrib" value="0"></label>
+  <label>Isha <input type="number" id="adj-isha" value="0"></label>
+  <label>Witr <input type="number" id="adj-witr" value="0"></label>
+  <button onclick="applyAdjustment()">Apply Adjustment</button>
+</div>
+
+<div class="box">
+  <h3>Remaining Missed Prayers</h3>
+  <p>Fajr: <span id="fajr">0</span></p>
+  <p>Zuhr: <span id="zuhr">0</span></p>
+  <p>Asr: <span id="asr">0</span></p>
+  <p>Maghrib: <span id="maghrib">0</span></p>
+  <p>Isha: <span id="isha">0</span></p>
+  <p>Witr: <span id="witr">0</span></p>
+</div>
+
+<script>
+  const prayers = ["fajr","zuhr","asr","maghrib","isha","witr"];
+
+  function get(key, def) {
+    return JSON.parse(localStorage.getItem(key)) || def;
+  }
+  function set(key, val) {
+    localStorage.setItem(key, JSON.stringify(val));
+  }
+
+  function daysBetween(a,b) {
+    return Math.floor((new Date(b)-new Date(a))/(1000*60*60*24))+1;
+  }
+
+  function setInitialMissed() {
+    const s = start.value, e = end.value;
+    if(!s || !e) return alert("Select dates");
+    const days = daysBetween(s,e);
+    const base = {};
+    prayers.forEach(p => base[p] = days);
+    set("initial", base);
+    updateRemaining();
+  }
+
+  function save() {
+    const d = date.value;
+    if(!d) return alert("Select date");
+    const data = get("prayed", {});
+    data[d] = [];
+    document.querySelectorAll("input[type=checkbox]:checked")
+      .forEach(cb => data[d].push(cb.value));
+    set("prayed", data);
+    updateRemaining();
+  }
+
+  function loadDate() {
+    const d = date.value;
+    const data = get("prayed", {});
+    document.querySelectorAll("input[type=checkbox]").forEach(cb =>
+      cb.checked = data[d]?.includes(cb.value) || false
+    );
+  }
+
+  function applyAdjustment() {
+    const adj = get("adjust", {});
+    prayers.forEach(p => {
+      adj[p] = (adj[p] || 0) + Number(document.getElementById("adj-"+p).value);
+      document.getElementById("adj-"+p).value = 0;
+    });
+    set("adjust", adj);
+    updateRemaining();
+  }
+
+  function updateRemaining() {
+    const init = get("initial", {});
+    const adj = get("adjust", {});
+    const prayed = get("prayed", {});
+    const prayedCount = {};
+
+    prayers.forEach(p => prayedCount[p] = 0);
+
+    Object.values(prayed).forEach(day =>
+      day.forEach(p => prayedCount[p]++)
+    );
+
+    prayers.forEach(p => {
+      const remaining = (init[p] || 0) - prayedCount[p] + (adj[p] || 0);
+      document.getElementById(p).innerText = Math.max(remaining,0);
+    });
+  }
+
+  updateRemaining();
+</script>
+
+</body>
+</html>
+
