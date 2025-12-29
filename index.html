@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <title>qprayer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="theme-color" content="#2e7d32">
   <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -18,23 +18,16 @@
     h2, h3 { text-align: center; }
     label { display: block; margin: 5px 0; }
     button { width: 100%; padding: 10px; margin-top: 8px; }
-    .box {
-      background: #f3f3f3;
-      padding: 10px;
-      margin-top: 15px;
-    }
-    input[type=number] {
-      width: 100%;
-      padding: 5px;
-    }
+    .box { background: #f3f3f3; padding: 10px; margin-top: 15px; }
+    input[type=number] { width: 100%; padding: 5px; }
   </style>
 </head>
 <body>
 
-<h2>Missed Prayer Tracker</h2>
+<h2>QPrayer</h2>
 
 <div class="box">
-  <h3>Initial Missed Period</h3>
+  <h3>Calculate Initial Prayer Missed Period</h3>
   <label>From: <input type="date" id="start"></label>
   <label>To: <input type="date" id="end"></label>
   <button onclick="setInitialMissed()">Set Initial Missed</button>
@@ -76,20 +69,37 @@
   <p>Witr: <span id="witr">0</span></p>
 </div>
 
+<div class="box">
+  <h3>Export / Import Data</h3>
+  <p style="font-size:12px;">To maintain data across devices, use export/import.</p>
+  <button onclick="exportData()">Export JSON</button>
+
+  <button onclick="importData()">Import JSON</button>
+
+  <label for="importFile">Select JSON file:</label>
+  <input type="file" id="importFile" accept=".json">
+
+  <label>
+    <input type="radio" name="importMode" value="merge" checked> Merge
+  </label>
+  <label>
+    <input type="radio" name="importMode" value="replace"> Replace
+  </label>
+
+  
+  <p style="font-size:12px;">Merge combines data from multiple devices. Replace overwrites all existing data.</p>
+</div>
+
+
 <script>
   const prayers = ["fajr","zuhr","asr","maghrib","isha","witr"];
 
-  function get(key, def) {
-    return JSON.parse(localStorage.getItem(key)) || def;
-  }
-  function set(key, val) {
-    localStorage.setItem(key, JSON.stringify(val));
-  }
+  function get(key, def) { return JSON.parse(localStorage.getItem(key)) || def; }
+  function set(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 
-  function daysBetween(a,b) {
-    return Math.floor((new Date(b)-new Date(a))/(1000*60*60*24))+1;
-  }
+  function daysBetween(a,b) { return Math.floor((new Date(b)-new Date(a))/(1000*60*60*24))+1; }
 
+  // Initial missed prayers
   function setInitialMissed() {
     const s = start.value, e = end.value;
     if(!s || !e) return alert("Select dates");
@@ -100,6 +110,7 @@
     updateRemaining();
   }
 
+  // Save / Update daily prayed prayers
   function save() {
     const d = date.value;
     if(!d) return alert("Select date");
@@ -111,6 +122,7 @@
     updateRemaining();
   }
 
+  // Load checkboxes for selected date
   function loadDate() {
     const d = date.value;
     const data = get("prayed", {});
@@ -119,6 +131,7 @@
     );
   }
 
+  // Manual adjustment
   function applyAdjustment() {
     const adj = get("adjust", {});
     prayers.forEach(p => {
@@ -129,27 +142,100 @@
     updateRemaining();
   }
 
+  // Update remaining prayers
   function updateRemaining() {
     const init = get("initial", {});
     const adj = get("adjust", {});
     const prayed = get("prayed", {});
     const prayedCount = {};
-
     prayers.forEach(p => prayedCount[p] = 0);
-
-    Object.values(prayed).forEach(day =>
-      day.forEach(p => prayedCount[p]++)
-    );
-
+    Object.values(prayed).forEach(day => day.forEach(p => prayedCount[p]++));
     prayers.forEach(p => {
       const remaining = (init[p] || 0) - prayedCount[p] + (adj[p] || 0);
       document.getElementById(p).innerText = Math.max(remaining,0);
     });
   }
 
+  // Export data as JSON
+  function exportData() {
+    const data = {
+      initial: get("initial", {}),
+      prayed: get("prayed", {}),
+      adjust: get("adjust", {})
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "qprayer_data.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Import data from JSON file
+function importData() {
+  const fileInput = document.getElementById("importFile");
+  if(fileInput.files.length === 0) return alert("Select a JSON file to import");
+
+  const mode = document.querySelector('input[name="importMode"]:checked').value;
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    try {
+      const importedData = JSON.parse(e.target.result);
+
+      if(mode === "replace") {
+        // Replace everything
+        if(importedData.initial) set("initial", importedData.initial);
+        if(importedData.prayed) set("prayed", importedData.prayed);
+        if(importedData.adjust) set("adjust", importedData.adjust);
+        updateRemaining();
+        alert("Data replaced successfully!");
+        return;
+      }
+
+      // Merge mode
+      const currentInit = get("initial", {});
+      if(importedData.initial) {
+        prayers.forEach(p => {
+          currentInit[p] = Math.max(currentInit[p] || 0, importedData.initial[p] || 0);
+        });
+        set("initial", currentInit);
+      }
+
+      const currentPrayed = get("prayed", {});
+      if(importedData.prayed) {
+        Object.keys(importedData.prayed).forEach(date => {
+          if(!currentPrayed[date]) currentPrayed[date] = [];
+          importedData.prayed[date].forEach(p => {
+            if(!currentPrayed[date].includes(p)) currentPrayed[date].push(p);
+          });
+        });
+        set("prayed", currentPrayed);
+      }
+
+      const currentAdj = get("adjust", {});
+      if(importedData.adjust) {
+        prayers.forEach(p => {
+          currentAdj[p] = (currentAdj[p] || 0) + (importedData.adjust[p] || 0);
+        });
+        set("adjust", currentAdj);
+      }
+
+      updateRemaining();
+      alert("Data imported and merged successfully!");
+
+    } catch(err) {
+      alert("Invalid JSON file!");
+    }
+  };
+
+  reader.readAsText(file);
+}
+
   updateRemaining();
 </script>
 
 </body>
 </html>
-
